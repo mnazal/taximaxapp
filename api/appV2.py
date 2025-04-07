@@ -2,17 +2,57 @@ from flask import Flask, request, jsonify
 from profitability_evaluatorV2 import RequestEvaluator, DriverProfile, TripRequest, UserProfile, PricingEngine, PricingConfig
 from dataclasses import asdict
 import logging
+import time
+from flask_cors import CORS
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+CORS(app)  # Enable CORS for all routes
 
 # Initialize pricing engine and evaluator
 config = PricingConfig()
 pricing_engine = PricingEngine(config)
 evaluator = RequestEvaluator(pricing_engine)
+
+
+@app.route("/calculate_price", methods=["POST"])
+def calculate_price():
+    try:
+        data = request.json
+        
+        trip_request = TripRequest(
+            user_id=data['trip_request']['user_id'],
+            distance=data['trip_request']['distance'],
+            duration=data['trip_request']['duration'],
+            zone=data['trip_request'].get('zone', "downtown"),
+            timestamp=time.time(),
+            ride_demand_level=data['trip_request'].get('ride_demand_level', 4),
+            traffic_level=data['trip_request'].get('traffic_level', 3),
+            weather_severity=data['trip_request'].get('weather_severity', 2),
+            traffic_blocks=data['trip_request'].get('traffic_blocks', 3),
+            is_holiday=data['trip_request'].get('is_holiday', False),
+            is_event_nearby=data['trip_request'].get('is_event_nearby', False)
+        )
+
+        user_profile = UserProfile(
+            loyalty_tier=data['user_profile'].get('loyalty_tier', 4),
+            price_sensitivity=data['user_profile'].get('price_sensitivity', 0.95)
+        )
+
+        price = pricing_engine.calculate_price(
+            request=trip_request,
+            user=user_profile,
+            current_supply=data.get('current_supply', 20)
+        )
+
+        return jsonify({"fare": price})
+
+    except Exception as e:
+        logger.error(f"Error calculating price: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/rank-requests', methods=['POST'])
 def rank_requests():

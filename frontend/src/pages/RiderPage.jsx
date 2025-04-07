@@ -33,10 +33,12 @@ function RiderPage() {
   const dropoffRef = useRef(null);
   const mapRef = useRef(null);
   const socket = useRef(null);
+  const [isCalculatingFare, setIsCalculatingFare] = useState(false);
+  const [fareError, setFareError] = useState(null);
 
   useEffect(() => {
     // Initialize socket connection
-    socket.current = io('http://localhost:5000');
+    socket.current = io(import.meta.env.VITE_SOCKET_URL);
 
     // Socket event listeners
     socket.current.on('ride_assigned', (data) => {
@@ -97,46 +99,142 @@ function RiderPage() {
         destination: { lat: destLat, lng: destLng },
         travelMode: window.google.maps.TravelMode.DRIVING,
       },
-      (result, status) => {
+      async (result, status) => {
         if (status === 'OK') {
           setDirections(result);
           const route = result.routes[0].legs[0];
-          setDistance(route.distance.value / 1000); // Convert to kilometers
-          setDuration(route.duration.value / 60); // Convert to minutes
-          const fare = calculateFare(route.distance.value / 1000);
-          setFare(fare);
+          const newDistance = route.distance.value / 1000; // Convert to kilometers
+          const newDuration = route.duration.value / 60; // Convert to minutes
+          setDistance(newDistance);
+          setDuration(newDuration);
+          
+          // Calculate fare after getting route details
+          await calculateFare(newDistance, newDuration);
         }
       }
     );
   };
 
-  const calculateFare = (distance) => {
-    const baseFare = 2.5;
-    const perKmRate = 1.5;
-    return baseFare + (distance * perKmRate);
+  const calculateFare = async (routeDistance, routeDuration) => {
+    try {
+      setIsCalculatingFare(true);
+      setFareError(null);
+      
+      // Get weather severity for the pickup location
+      const weatherSeverity = await getWeatherSeverity(center.lat, center.lng);
+      
+      // Create request payload with actual route details
+      const requestPayload = {
+        trip_request: {
+          user_id: "user123",
+          distance: routeDistance || 5,
+          duration: routeDuration || 15,
+          ride_demand_level: 4,
+          traffic_level: 3,
+          weather_severity: weatherSeverity,
+          traffic_blocks: 3,
+          is_holiday: false,
+          is_event_nearby: false
+        },
+        user_profile: {
+          loyalty_tier: 4,
+          price_sensitivity: 0.95
+        },
+        current_supply: 15
+      };
+
+      const response = await axios.post(import.meta.env.VITE_RIDE_PRICING_API_URL, requestPayload, {
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        }
+      });
+      
+      if (response.data && response.data.fare) {
+        setFare(response.data.fare);
+      } else {
+        throw new Error('Invalid response format');
+      }
+    } catch (error) {
+      console.error('Error calculating fare:', error);
+      setFareError('Failed to calculate fare. Please try again.');
+    } finally {
+      setIsCalculatingFare(false);
+    }
+  };
+
+  const getWeatherSeverity = async (lat, lng) => {
+    const apiKey = import.meta.env.VITE_WEATHER_API_KEY;
+    const weatherApiUrl = import.meta.env.VITE_WEATHER_API_URL;
+    const response = await axios.get(
+      `${weatherApiUrl}/weather?lat=${lat}&lon=${lng}&units=metric&appid=${apiKey}`
+    );
+    
+    const weather = response.data.weather[0].main;
+    // Convert weather condition to severity level (1-5)
+    const severityMap = {
+      'Clear': 1,
+      'Clouds': 2,
+      'Rain': 3,
+      'Snow': 4,
+      'Thunderstorm': 5
+    };
+    
+    return severityMap[weather] || 2; // Default to 2 if weather not found
   };
 
   const handleBookRide = async () => {
     try {
       setRideStatus('requesting');
-      const response = await axios.post('http://localhost:5000/api/rides/book', {
+      
+      // Get weather severity
+      const weatherSeverity = await getWeatherSeverity(center.lat, center.lng);
+      
+      // Create the request payload
+      const requestPayload = {
+        trip_request: {
+          user_id: "user123", // You should replace this with actual user ID
+          distance: distance,
+          duration: duration,
+          ride_demand_level: 4, // You might want to calculate this based on time of day
+          traffic_level: 3, // You might want to get this from a traffic API
+          weather_severity: weatherSeverity,
+          traffic_blocks: 3, // You might want to calculate this based on route
+          is_holiday: false, // You might want to check against a holiday calendar
+          is_event_nearby: false // You might want to check against an events API
+        },
+        user_profile: {
+          loyalty_tier: 4, // You should get this from user data
+          price_sensitivity: 0.95 // You should get this from user data
+        },
+        current_supply: 15 // You should get this from your backend
+      };
+
+      // Calculate fare first
+      const fareResponse = await axios.post(import.meta.env.VITE_RIDE_PRICING_API_URL, requestPayload);
+      const calculatedFare = fareResponse.data.fare;
+      setFare(calculatedFare);
+      
+      // Send the booking request to your backend
+      const bookingResponse = await axios.post(`${import.meta.env.VITE_API_URL}/api/rides/book`, {
         pickup: pickup,
         dropoff: dropoff,
         pickup_lat: center.lat,
         pickup_lng: center.lng,
         dropoff_lat: selectedLocation.lat,
         dropoff_lng: selectedLocation.lng,
-        fare: fare,
+        fare: calculatedFare,
         distance: distance,
         duration: duration
       });
       
-      setRideId(response.data.ride_id);
+      // Store the ride ID and emit the socket event
+      setRideId(bookingResponse.data.ride_id);
       socket.current.emit('ride_requested', {
-        rideId: response.data.ride_id,
+        rideId: bookingResponse.data.ride_id,
         pickup: pickup,
         dropoff: dropoff,
-        fare: fare
+        fare: calculatedFare
       });
     } catch (error) {
       console.error('Error booking ride:', error);
@@ -174,24 +272,45 @@ function RiderPage() {
   };
 
   const renderRideDetails = () => {
-    if (!distance || !duration || !fare) return null;
+    if (!pickup) return null;
 
     return (
       <Card sx={{ mb: 2, bgcolor: 'background.paper' }}>
         <CardContent>
           <Grid container spacing={2}>
-            <Grid item xs={4}>
-              <Typography variant="subtitle2" color="textSecondary">Distance</Typography>
-              <Typography variant="h6">{distance.toFixed(1)} km</Typography>
-            </Grid>
-            <Grid item xs={4}>
-              <Typography variant="subtitle2" color="textSecondary">Duration</Typography>
-              <Typography variant="h6">{Math.round(duration)} min</Typography>
-            </Grid>
-            <Grid item xs={4}>
-              <Typography variant="subtitle2" color="textSecondary">Estimated Fare</Typography>
-              <Typography variant="h6" color="primary">${fare.toFixed(2)}</Typography>
-            </Grid>
+            {isCalculatingFare ? (
+              <Grid item xs={12}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <CircularProgress size={24} sx={{ mr: 2 }} />
+                  <Typography>Calculating fare...</Typography>
+                </Box>
+              </Grid>
+            ) : fareError ? (
+              <Grid item xs={12}>
+                <Alert severity="error">{fareError}</Alert>
+              </Grid>
+            ) : (
+              <>
+                {distance && (
+                  <Grid item xs={4}>
+                    <Typography variant="subtitle2" color="textSecondary">Distance</Typography>
+                    <Typography variant="h6">{distance.toFixed(1)} km</Typography>
+                  </Grid>
+                )}
+                {duration && (
+                  <Grid item xs={4}>
+                    <Typography variant="subtitle2" color="textSecondary">Duration</Typography>
+                    <Typography variant="h6">{Math.round(duration)} min</Typography>
+                  </Grid>
+                )}
+                {fare && (
+                  <Grid item xs={4}>
+                    <Typography variant="subtitle2" color="textSecondary">Estimated Fare</Typography>
+                    <Typography variant="h6" color="primary">Rs.{(fare).toFixed(1)}</Typography>
+                  </Grid>
+                )}
+              </>
+            )}
           </Grid>
         </CardContent>
       </Card>
@@ -260,7 +379,7 @@ function RiderPage() {
 
         <Grid item xs={12} md={4}>
           <Paper elevation={3} sx={{ p: 3, borderRadius: 2 }}>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4, }}>
               <LoadScript
                 googleMapsApiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY}
                 libraries={libraries}

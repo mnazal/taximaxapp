@@ -20,41 +20,7 @@ const Header = () => {
           TaxiMax
         </Typography>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Button 
-            color="inherit" 
-            component={Link} 
-            to="/driver"
-            sx={{ 
-              display: 'flex', 
-              alignItems: 'center',
-              gap: 1
-            }}
-          >
-            <span style={{ fontSize: '1.2rem' }}>🚗</span>
-            Driver
-          </Button>
-          <Button 
-            color="inherit" 
-            component={Link} 
-            to="/"
-            sx={{ 
-              display: 'flex', 
-              alignItems: 'center',
-              gap: 1
-            }}
-          >
-            <span style={{ fontSize: '1.2rem' }}>👤</span>
-            Rider
-          </Button>
-          <IconButton
-            size="large"
-            edge="end"
-            color="inherit"
-            aria-label="menu"
-            onClick={handleMenu}
-          >
-            <span style={{ fontSize: '1.5rem' }}>☰</span>
-          </IconButton>
+          
           <Menu
             anchorEl={anchorEl}
             open={Boolean(anchorEl)}

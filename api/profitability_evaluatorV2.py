@@ -82,8 +82,11 @@ class RequestEvaluator:
    
     def evaluate_request(self, request: TripRequest, driver: DriverProfile, user: UserProfile, current_supply: int) -> RequestScore:
         """Evaluate a single request and return its profitability score"""
-        # Calculate fare using pricing engine
-        fare = self.pricing_engine.calculate_price(request, user, current_supply)
+        fare = request.fare
+        if fare is None:
+            logger.warning(f"No fare provided for request {request.user_id}_{request.timestamp}. Skipping.")
+            return None  # Or handle as needed
+
        
         # Get deadhead costs (distance and time to pickup)
         deadhead = self.calculate_deadhead_costs(driver.current_location, request.zone)
