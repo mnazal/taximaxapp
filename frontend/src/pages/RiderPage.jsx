@@ -107,21 +107,93 @@ function RiderPage() {
           const newDuration = route.duration.value / 60; // Convert to minutes
           setDistance(newDistance);
           setDuration(newDuration);
+
+          const trafficResponse = await getRouteWithTraffic(destLat, destLng, center.lat, center.lng);
           
           // Calculate fare after getting route details
-          await calculateFare(newDistance, newDuration);
+          await calculateFare(newDistance, newDuration, trafficResponse);
         }
       }
     );
   };
 
-  const calculateFare = async (routeDistance, routeDuration) => {
+  const getRouteWithTraffic = async (destLat, destLng, pickupLat, pickupLng) => {
+    try {
+      // Check if we have valid coordinates
+      if (!pickupLat || !pickupLng || !destLat || !destLng) {
+        console.warn('Missing coordinates for traffic calculation');
+        return {
+          distanceInKm: 0,
+          durationInTrafficMin: 0
+        };
+      }
+
+      return new Promise((resolve, reject) => {
+        const directionsService = new window.google.maps.DirectionsService();
+        
+        directionsService.route(
+          {
+            origin: new window.google.maps.LatLng(pickupLat, pickupLng),
+            destination: new window.google.maps.LatLng(destLat, destLng),
+            travelMode: window.google.maps.TravelMode.DRIVING,
+            drivingOptions: {
+              departureTime: new Date(),
+              trafficModel: window.google.maps.TrafficModel.BEST_GUESS
+            }
+          },
+          (result, status) => {
+            if (status === window.google.maps.DirectionsStatus.OK) {
+              const route = result.routes[0];
+              const leg = route.legs[0];
+              
+              const distanceInKm = leg.distance.value / 1000;
+              const durationInTrafficMin = leg.duration_in_traffic?.value / 60 || leg.duration.value / 60;
+              
+              resolve({ distanceInKm, durationInTrafficMin });
+            } else {
+              console.warn('Error getting directions:', status);
+              resolve({
+                distanceInKm: 0,
+                durationInTrafficMin: 0
+              });
+            }
+          }
+        );
+      });
+    } catch (error) {
+      console.error('Error getting traffic data:', error);
+      return {
+        distanceInKm: 0,
+        durationInTrafficMin: 0
+      };
+    }
+  };
+  
+  const calculateFare = async (routeDistance, routeDuration, trafficResponse) => {
     try {
       setIsCalculatingFare(true);
       setFareError(null);
       
       // Get weather severity for the pickup location
       const weatherSeverity = await getWeatherSeverity(center.lat, center.lng);
+
+      const trafficFactor = trafficResponse.durationInTrafficMin / routeDuration;
+
+      let trafficLevel = 0;
+      let trafficBlocks = 0;
+
+      console.log("Traffic factor:", trafficFactor);
+    
+      if (trafficFactor >= 1.4) {
+        trafficLevel = 3;
+        trafficBlocks = 1;
+      } else if (trafficFactor >= 1.2) {
+        trafficLevel = 2;
+        trafficBlocks = 2;
+      } else {
+        trafficLevel = 1;
+        trafficBlocks = 3;
+      }
       
       // Create request payload with actual route details
       const requestPayload = {
@@ -130,9 +202,9 @@ function RiderPage() {
           distance: routeDistance || 5,
           duration: routeDuration || 15,
           ride_demand_level: 4,
-          traffic_level: 3,
+          traffic_level: trafficLevel || 1,
           weather_severity: weatherSeverity,
-          traffic_blocks: 3,
+          traffic_blocks: trafficBlocks || 3,
           is_holiday: false,
           is_event_nearby: false
         },

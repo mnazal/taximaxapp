@@ -167,7 +167,7 @@ def main():
     """Main function to execute the pipeline."""
     try:
         # Load data
-        df = load_data('realistic_taxi_data.csv')
+        df = load_data('../realistic_taxi_data.csv')
         
         # Preprocess
         df = preprocess_data(df)
