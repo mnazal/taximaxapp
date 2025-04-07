@@ -188,32 +188,32 @@ function RiderPage() {
       setRideStatus('requesting');
       
       // Get weather severity
-      const weatherSeverity = await getWeatherSeverity(center.lat, center.lng);
+      // const weatherSeverity = await getWeatherSeverity(center.lat, center.lng);
       
-      // Create the request payload
-      const requestPayload = {
-        trip_request: {
-          user_id: "user123", // You should replace this with actual user ID
-          distance: distance,
-          duration: duration,
-          ride_demand_level: 4, // You might want to calculate this based on time of day
-          traffic_level: 3, // You might want to get this from a traffic API
-          weather_severity: weatherSeverity,
-          traffic_blocks: 3, // You might want to calculate this based on route
-          is_holiday: false, // You might want to check against a holiday calendar
-          is_event_nearby: false // You might want to check against an events API
-        },
-        user_profile: {
-          loyalty_tier: 4, // You should get this from user data
-          price_sensitivity: 0.95 // You should get this from user data
-        },
-        current_supply: 15 // You should get this from your backend
-      };
+      // // Create the request payload
+      // const requestPayload = {
+      //   trip_request: {
+      //     user_id: "user123", // You should replace this with actual user ID
+      //     distance: distance,
+      //     duration: duration,
+      //     ride_demand_level: 4, // You might want to calculate this based on time of day
+      //     traffic_level: 3, // You might want to get this from a traffic API
+      //     weather_severity: weatherSeverity,
+      //     traffic_blocks: 3, // You might want to calculate this based on route
+      //     is_holiday: false, // You might want to check against a holiday calendar
+      //     is_event_nearby: false // You might want to check against an events API
+      //   },
+      //   user_profile: {
+      //     loyalty_tier: 4, // You should get this from user data
+      //     price_sensitivity: 0.95 // You should get this from user data
+      //   },
+      //   current_supply: 15 // You should get this from your backend
+      // };
 
-      // Calculate fare first
-      const fareResponse = await axios.post(import.meta.env.VITE_RIDE_PRICING_API_URL, requestPayload);
-      const calculatedFare = fareResponse.data.fare;
-      setFare(calculatedFare);
+      // // Calculate fare first
+      // const fareResponse = await axios.post(import.meta.env.VITE_RIDE_PRICING_API_URL, requestPayload);
+      // const calculatedFare = fareResponse.data.fare;
+      // setFare(calculatedFare);
       
       // Send the booking request to your backend
       const bookingResponse = await axios.post(`${import.meta.env.VITE_API_URL}/api/rides/book`, {
@@ -223,7 +223,7 @@ function RiderPage() {
         pickup_lng: center.lng,
         dropoff_lat: selectedLocation.lat,
         dropoff_lng: selectedLocation.lng,
-        fare: calculatedFare,
+        fare: fare,
         distance: distance,
         duration: duration
       });
@@ -234,7 +234,7 @@ function RiderPage() {
         rideId: bookingResponse.data.ride_id,
         pickup: pickup,
         dropoff: dropoff,
-        fare: calculatedFare
+        fare: fare
       });
     } catch (error) {
       console.error('Error booking ride:', error);
