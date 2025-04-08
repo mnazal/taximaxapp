@@ -1,11 +1,16 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { GoogleMap, LoadScript, DirectionsRenderer, Marker } from '@react-google-maps/api';
 import { Box, Button, Paper, Typography, Card, CardContent, Grid, List, CircularProgress, Alert, useMediaQuery, useTheme } from '@mui/material';
-import { io } from 'socket.io-client';
 import axios from 'axios';
 import Header from '../components/Header';
 import styled from 'styled-components';
+import socketService from '../services/socketService';
 
+
+
+
+
+const user = JSON.parse(localStorage.getItem('user') || '{}');
 const PageContainer = styled.div`
   min-height: 100vh;
   display: flex;
@@ -39,8 +44,8 @@ function DriverPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isMapLoaded, setIsMapLoaded] = useState(false);
   const [recommendedRideId, setRecommendedRideId] = useState(null);
+  const [error, setError] = useState(null);
   const mapRef = useRef(null);
-  const socket = useRef(null);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
@@ -134,23 +139,19 @@ function DriverPage() {
   };
 
   useEffect(() => {
-    // Initialize socket connection
-    socket.current = io('http://localhost:5000');
+    // Connect to socket if not already connected
+    socketService.connect();
 
-    // Socket event listeners
-    socket.current.on('ride_requested', (ride) => {
+    // Set up event listeners
+    const handleRideRequested = (ride) => {
+      console.log('New ride requested:', ride);
       setRideRequests(prev => {
         const newRequests = [...prev, ride];
-        // Get recommendation when new ride comes in
-        //getRecommendedRide(newRequests);
         return newRequests;
       });
       setRecommendedRideRequests(prevRecommended => {
-        console.log("Ride distance")
-        console.log(ride)
         const apiRide = {
-          // Add your API-specific ride format here
-          user_id:"Userid",
+          user_id: "Userid",
           rideId: ride.rideId,
           distance: ride.distance,
           duration: ride.duration,
@@ -163,19 +164,17 @@ function DriverPage() {
           is_holiday: ride.is_holiday,
           is_event_nearby: ride.is_event_nearby,
           fare: ride.fare,
-          // Add any other fields required by your API
         };
         const newRecommendedRequests = [...prevRecommended, apiRide];
-        // Get recommendation when new ride comes in
         getRecommendedRide(newRecommendedRequests);
         return newRecommendedRequests;
       });
-    });
+    };
 
-    socket.current.on('ride_cancelled', (rideId) => {
+    const handleRideCancelled = (rideId) => {
+      console.log('Ride cancelled:', rideId);
       setRideRequests(prev => {
         const newRequests = prev.filter(r => r.rideId !== rideId);
-        // Update recommendation when ride is cancelled
         if (newRequests.length > 0) {
           getRecommendedRide(newRequests);
         } else {
@@ -183,7 +182,17 @@ function DriverPage() {
         }
         return newRequests;
       });
-    });
+      
+      if (currentRide && currentRide.rideId === rideId) {
+        setCurrentRide(null);
+        setDriverStatus('available');
+        setDirections(null);
+      }
+    };
+
+    // Add event listeners
+    socketService.on('ride_requested', handleRideRequested);
+    socketService.on('ride_cancelled', handleRideCancelled);
 
     // Get driver's current location
     if (navigator.geolocation) {
@@ -209,11 +218,11 @@ function DriverPage() {
     }
 
     return () => {
-      if (socket.current) {
-        socket.current.disconnect();
-      }
+      // Remove event listeners
+      socketService.off('ride_requested', handleRideRequested);
+      socketService.off('ride_cancelled', handleRideCancelled);
     };
-  }, [getRecommendedRide]);
+  }, [getRecommendedRide, currentRide]);
 
   const calculateRoute = useCallback((pickupLat, pickupLng, dropoffLat, dropoffLng) => {
     if (!window.google || !window.google.maps) {
@@ -240,6 +249,8 @@ function DriverPage() {
 
   const handleAcceptRide = async (ride) => {
     try {
+      console.log('Accepting ride:', ride);
+      
       const response = await axios.post('http://localhost:5000/api/rides/accept', {
         rideId: ride.rideId,
         driverId: 'DRIVER_ID', // Replace with actual driver ID
@@ -249,21 +260,49 @@ function DriverPage() {
       setCurrentRide(ride);
       setDriverStatus('in_ride');
       setRideRequests([]);
+      setError(null); // Clear any previous errors
       
-      // Notify rider that ride is accepted
-      socket.current.emit('ride_accepted', {
+      // Calculate ETA based on distance and traffic
+      const eta = Math.ceil(ride.duration * 1.2); // Adding 20% buffer for traffic
+      
+      // Prepare driver details
+      const driverDetails = {
+        name: user.fullName, // Replace with actual driver name
+        vehicle: 'Toyota Camry', // Replace with actual vehicle
+        phone: '+1234567890', // Replace with actual phone
+        eta: eta,
+        currentLocation: center,
+        licensePlate: 'ABC123', // Replace with actual license plate
+        rating: 4.8, // Replace with actual rating
+        totalRides: 150, // Replace with actual total rides
+        profilePicture: 'https://example.com/driver.jpg' // Replace with actual profile picture URL
+      };
+
+      // Notify specific rider that ride is accepted
+      console.log('Emitting ride_accepted event:', {
         rideId: ride.rideId,
-        driver: {
-          name: 'John Doe', // Replace with actual driver name
-          vehicle: 'Toyota Camry', // Replace with actual vehicle
-          phone: '+1234567890' // Replace with actual phone
-        }
+        driver: driverDetails
+      });
+      
+      socketService.emit('ride_accepted', {
+        rideId: ride.rideId,
+        driver: driverDetails
       });
 
       // Calculate and display route
       calculateRoute(ride.pickup_lat, ride.pickup_lng, ride.dropoff_lat, ride.dropoff_lng);
     } catch (error) {
       console.error('Error accepting ride:', error);
+      if (error.response && error.response.status === 404) {
+        // Remove the ride from available requests since it's already accepted
+        setRideRequests(prev => prev.filter(r => r.rideId !== ride.rideId));
+        setRecommendedRideRequests(prev => prev.filter(r => r.rideId !== ride.rideId));
+        setRecommendedRideId(null);
+        // Show error message
+        setError('This ride has already been accepted by another driver.');
+      } else {
+        setError('Error accepting ride. Please try again.');
+      }
     }
   };
 
@@ -281,6 +320,16 @@ function DriverPage() {
     }
   };
 
+  // Add this function to clear error after a delay
+  useEffect(() => {
+    if (error) {
+      const timer = setTimeout(() => {
+        setError(null);
+      }, 5000); // Clear error after 5 seconds
+      return () => clearTimeout(timer);
+    }
+  }, [error]);
+
   const renderRideRequests = () => {
     if (rideRequests.length === 0) {
       return (
@@ -292,6 +341,11 @@ function DriverPage() {
 
     return (
       <List sx={{ width: '100%' }}>
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        )}
         {rideRequests.map((ride) => (
           <Card 
             key={ride.rideId} 
@@ -325,6 +379,12 @@ function DriverPage() {
               <Typography variant="body2">To: <Box component="span" sx={{ fontWeight: 'bold' }}>{ride.dropoff}</Box></Typography>
               <Typography variant="h6" sx={{ color: '#2e7d32', fontWeight: 'bold' }}>
                 Fare: Rs.{ride.fare.toFixed(2)}
+              </Typography>
+              <Typography variant="body2" color="textSecondary">
+                Distance: {(ride.distance * 1.60934).toFixed(1)} km
+              </Typography>
+              <Typography variant="body2" color="textSecondary">
+                Estimated Duration: {Math.ceil(ride.duration)} minutes
               </Typography>
              
               <Button

@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { GoogleMap, LoadScript, Autocomplete, DirectionsRenderer } from '@react-google-maps/api';
-import { Box, Button, TextField, Paper, Typography, CircularProgress, Alert, Card, CardContent, Grid } from '@mui/material';
+import { Box, Button, TextField, Paper, Typography, CircularProgress, Alert, Card, CardContent, Grid, Avatar } from '@mui/material';
 import axios from 'axios';
-import { io } from 'socket.io-client';
+import socketService from '../services/socketService';
+import authService from '../services/authService';
 import Header from '../components/Header';
 import styled from 'styled-components';
 
@@ -42,10 +43,10 @@ function RiderPage() {
   const [duration, setDuration] = useState(null);
   const [rideStatus, setRideStatus] = useState('idle'); // idle, requesting, confirmed
   const [driverDetails, setDriverDetails] = useState(null);
+  const [userInfo, setUserInfo] = useState(null);
   const pickupRef = useRef(null);
   const dropoffRef = useRef(null);
   const mapRef = useRef(null);
-  const socket = useRef(null);
   const [isCalculatingFare, setIsCalculatingFare] = useState(false);
   const [fareError, setFareError] = useState(null);
   const [trafficLevel, setTrafficLevel] = useState(1);
@@ -56,14 +57,32 @@ function RiderPage() {
 
 
   useEffect(() => {
-    // Initialize socket connection
-    socket.current = io(import.meta.env.VITE_SOCKET_URL);
+    // Get current user information
+    const currentUser = authService.getCurrentUser();
+    if (currentUser) {
+      setUserInfo(currentUser);
+    }
 
-    // Socket event listeners
-    socket.current.on('ride_assigned', (data) => {
-      setRideStatus('confirmed');
-      setDriverDetails(data.driver);
-    });
+    // Connect to socket if not already connected
+    socketService.connect();
+
+    // Set up event listeners
+    const handleRideAccepted = (data) => {
+      console.log('Received ride acceptance:', data);
+      if (data.rideId === rideId) {
+        console.log('Updating ride status to confirmed');
+        setRideStatus('confirmed');
+        setDriverDetails(data.driver);
+      }
+    };
+
+    const handleRoomJoined = (data) => {
+      console.log('Successfully joined room:', data.rideId);
+    };
+
+    // Add event listeners
+    socketService.on('ride_accepted', handleRideAccepted);
+    socketService.on('room_joined', handleRoomJoined);
 
     // Get user's current location
     if (navigator.geolocation) {
@@ -98,11 +117,11 @@ function RiderPage() {
     }
 
     return () => {
-      if (socket.current) {
-        socket.current.disconnect();
-      }
+      // Remove event listeners
+      socketService.off('ride_accepted', handleRideAccepted);
+      socketService.off('room_joined', handleRoomJoined);
     };
-  }, []);
+  }, [rideId]);
 
   const handleMapClick = (event) => {
     const lat = event.latLng.lat();
@@ -295,34 +314,6 @@ function RiderPage() {
     try {
       setRideStatus('requesting');
       
-      // Get weather severity
-      // const weatherSeverity = await getWeatherSeverity(center.lat, center.lng);
-      
-      // // Create the request payload
-      // const requestPayload = {
-      //   trip_request: {
-      //     user_id: "user123", // You should replace this with actual user ID
-      //     distance: distance,
-      //     duration: duration,
-      //     ride_demand_level: 4, // You might want to calculate this based on time of day
-      //     traffic_level: 3, // You might want to get this from a traffic API
-      //     weather_severity: weatherSeverity,
-      //     traffic_blocks: 3, // You might want to calculate this based on route
-      //     is_holiday: false, // You might want to check against a holiday calendar
-      //     is_event_nearby: false // You might want to check against an events API
-      //   },
-      //   user_profile: {
-      //     loyalty_tier: 4, // You should get this from user data
-      //     price_sensitivity: 0.95 // You should get this from user data
-      //   },
-      //   current_supply: 15 // You should get this from your backend
-      // };
-
-      // // Calculate fare first
-      // const fareResponse = await axios.post(import.meta.env.VITE_RIDE_PRICING_API_URL, requestPayload);
-      // const calculatedFare = fareResponse.data.fare;
-      // setFare(calculatedFare);
-      
       // Send the booking request to your backend
       const bookingResponse = await axios.post(`${import.meta.env.VITE_SOCKET_URL}/api/rides/book`, {
         pickup: pickup,
@@ -344,9 +335,15 @@ function RiderPage() {
       });
       
       // Store the ride ID and emit the socket event with the same data
-      setRideId(bookingResponse.data.ride_id);
-      socket.current.emit('ride_requested', {
-        rideId: bookingResponse.data.ride_id,
+      const newRideId = bookingResponse.data.ride_id;
+      setRideId(newRideId);
+      
+      // Join the ride room
+      socketService.joinRoom(newRideId);
+      
+      // Emit ride request with all necessary data
+      const rideRequestData = {
+        rideId: newRideId,
         pickup: pickup,
         dropoff: dropoff,
         fare: fare,
@@ -363,10 +360,37 @@ function RiderPage() {
         is_holiday: isHoliday,
         is_event_nearby: isEventNearby,
         user_loyalty_tier: 2
-      });
+      };
+      
+      console.log('Emitting ride request:', rideRequestData);
+      socketService.emit('ride_requested', rideRequestData);
     } catch (error) {
       console.error('Error booking ride:', error);
       setRideStatus('idle');
+    }
+  };
+
+  const handleCancelRide = async () => {
+    try {
+      if (!rideId) return;
+      
+      // Send cancellation request to backend
+      await axios.post(`${import.meta.env.VITE_SOCKET_URL}/api/rides/cancel`, {
+        rideId: rideId
+      });
+      
+      // Leave the ride room
+      socketService.leaveRoom(rideId);
+      
+      // Emit socket event for cancellation
+      socketService.emit('ride_cancelled', rideId);
+      
+      // Reset ride state
+      setRideStatus('idle');
+      setRideId(null);
+      setDriverDetails(null);
+    } catch (error) {
+      console.error('Error cancelling ride:', error);
     }
   };
 
@@ -454,15 +478,55 @@ function RiderPage() {
               <CircularProgress size={20} sx={{ mr: 2 }} />
               <Typography>Finding a driver...</Typography>
             </Box>
+            <Button
+              variant="outlined"
+              color="error"
+              onClick={handleCancelRide}
+              sx={{ mt: 2 }}
+            >
+              Cancel Ride Request
+            </Button>
           </Alert>
         );
       case 'confirmed':
         return (
           <Alert severity="success" sx={{ mt: 2 }}>
             <Typography variant="h6">Ride Confirmed!</Typography>
-            <Typography>Driver: {driverDetails?.name}</Typography>
-            <Typography>Vehicle: {driverDetails?.vehicle}</Typography>
-            <Typography>Contact: {driverDetails?.phone}</Typography>
+            <Box sx={{ mt: 2 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                <Avatar 
+                  src={driverDetails?.profilePicture} 
+                  alt={driverDetails?.name}
+                  sx={{ width: 56, height: 56, mr: 2 }}
+                />
+                <Box>
+                  <Typography variant="h6">{driverDetails?.name}</Typography>
+                  <Typography variant="body2" color="textSecondary">
+                    Rating: {driverDetails?.rating} ({driverDetails?.totalRides} rides)
+                  </Typography>
+                </Box>
+              </Box>
+              <Typography variant="body1">
+                <strong>Vehicle:</strong> {driverDetails?.vehicle}
+              </Typography>
+              <Typography variant="body1">
+                <strong>License Plate:</strong> {driverDetails?.licensePlate}
+              </Typography>
+              <Typography variant="body1">
+                <strong>Contact:</strong> {driverDetails?.phone}
+              </Typography>
+              <Typography variant="body1" color="primary">
+                <strong>ETA:</strong> {driverDetails?.eta} minutes
+              </Typography>
+              <Button
+                variant="outlined"
+                color="error"
+                onClick={handleCancelRide}
+                sx={{ mt: 2 }}
+              >
+                Cancel Ride
+              </Button>
+            </Box>
           </Alert>
         );
       default:
@@ -556,7 +620,8 @@ function RiderPage() {
                     sx={{ 
                       py: 1.5,
                       bgcolor: 'primary.main',
-                      '&:hover': { bgcolor: 'primary.dark' }
+                      '&:hover': { bgcolor: 'primary.dark' },
+                      display: rideStatus === 'confirmed' ? 'none' : 'block'
                     }}
                   >
                     {rideStatus === 'requesting' ? 'Requesting Ride...' : 'Book Ride'}

@@ -13,58 +13,43 @@ function initializeSocket(server) {
   io.on('connection', (socket) => {
     console.log('New client connected');
 
+    // Join a room for a specific ride
+    socket.on('join_ride', (rideId) => {
+      console.log(`Client joining ride room: ride_${rideId}`);
+      socket.join(`ride_${rideId}`);
+      // Send confirmation back to client
+      socket.emit('room_joined', { rideId });
+    });
+
+    // Leave a ride room
+    socket.on('leave_ride', (rideId) => {
+      console.log(`Client leaving ride room: ride_${rideId}`);
+      socket.leave(`ride_${rideId}`);
+    });
+
     // Handle ride request
-    socket.on('ride_requested', async (data) => {
-      try {
-        db.get(
-          `SELECT * FROM rides WHERE id = ?`,
-          [data.rideId],
-          (err, ride) => {
-            if (err) {
-              console.error('Error fetching ride:', err);
-              return;
-            }
-            if (ride) {
-              // Broadcast to all drivers
-              io.emit('ride_requested', {
-                rideId: ride.id,
-                pickup: ride.pickup,
-                dropoff: ride.dropoff,
-                fare: ride.fare,
-                pickup_lat: ride.pickup_lat,
-                pickup_lng: ride.pickup_lng,
-                dropoff_lat: ride.dropoff_lat,
-                dropoff_lng: ride.dropoff_lng,
-                distance: data.distance,
-                duration: data.duration,
-                ride_demand_level: data.ride_demand_level,
-                traffic_level: data.traffic_level,
-                weather_severity: data.weather_severity,
-                traffic_blocks: data.traffic_blocks,
-                is_holiday: data.is_holiday,
-                is_event_nearby: data.is_event_nearby,
-                user_loyalty_tier: data.user_loyalty_tier
-              });
-            }
-          }
-        );
-      } catch (error) {
-        console.error('Error handling ride request:', error);
-      }
+    socket.on('ride_requested', (ride) => {
+      console.log('New ride requested:', ride);
+      // Join the ride room
+      socket.join(`ride_${ride.rideId}`);
+      // Broadcast to all drivers
+      io.emit('ride_requested', ride);
     });
 
     // Handle ride acceptance
     socket.on('ride_accepted', (data) => {
-      // Notify the specific rider
-      io.emit('ride_assigned', {
-        rideId: data.rideId,
-        driver: data.driver
-      });
+      console.log('Ride accepted:', data);
+      // Send to specific ride room only
+      const roomName = `ride_${data.rideId}`;
+      console.log(`Sending to room: ${roomName}`);
+      console.log('Room members:', io.sockets.adapter.rooms.get(roomName));
+      io.to(roomName).emit('ride_accepted', data);
     });
 
     // Handle ride cancellation
     socket.on('ride_cancelled', (rideId) => {
-      io.emit('ride_cancelled', rideId);
+      console.log('Ride cancelled:', rideId);
+      io.to(`ride_${rideId}`).emit('ride_cancelled', rideId);
     });
 
     socket.on('disconnect', () => {

@@ -77,6 +77,25 @@ router.post('/complete', (req, res) => {
   );
 });
 
+// Cancel a ride
+router.post('/cancel', (req, res) => {
+  const { rideId } = req.body;
+  
+  db.run(
+    `UPDATE rides SET status = 'cancelled' WHERE id = ? AND status IN ('requested', 'accepted')`,
+    [rideId],
+    function(err) {
+      if (err) {
+        return res.status(500).json({ error: err.message });
+      }
+      if (this.changes === 0) {
+        return res.status(404).json({ error: 'Ride not found or cannot be cancelled' });
+      }
+      res.json({ success: true });
+    }
+  );
+});
+
 // Helper function to calculate fare
 function calculateFare(pickup_lat, pickup_lng, dropoff_lat, dropoff_lng) {
   // Simplified fare calculation
