@@ -330,6 +330,8 @@ function RiderPage() {
         pickup_lng: center.lng,
         dropoff_lat: selectedLocation.lat,
         dropoff_lng: selectedLocation.lng,
+        distance: distance,
+        duration: duration,
         ride_demand_level: 4,
         traffic_level: trafficLevel,
         weather_severity: weatherSeverity,
