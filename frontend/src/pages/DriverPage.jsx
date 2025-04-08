@@ -257,12 +257,7 @@
                 <Typography variant="body2" color="primary">
                   Fare: Rs.{ride.fare.toFixed(2)}
                 </Typography>
-                <Typography variant="body2">
-                  Distance: {ride.distance?.toFixed(1) || 'N/A'} km
-                </Typography>
-                <Typography variant="body2">
-                  Duration: {ride.duration?.toFixed(0) || 'N/A'} min
-                </Typography>
+               
                 <Button
                   variant="contained"
                   fullWidth
