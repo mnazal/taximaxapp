@@ -35,6 +35,12 @@ function RiderPage() {
   const socket = useRef(null);
   const [isCalculatingFare, setIsCalculatingFare] = useState(false);
   const [fareError, setFareError] = useState(null);
+  const [trafficLevel, setTrafficLevel] = useState(1);
+  const [trafficBlocks, setTrafficBlocks] = useState(3);
+  const [weatherSeverity, setWeatherSeverity] = useState(2);
+  const [isHoliday, setIsHoliday] = useState(false);
+  const [isEventNearby, setIsEventNearby] = useState(false);
+
 
   useEffect(() => {
     // Initialize socket connection
@@ -194,6 +200,12 @@ function RiderPage() {
         trafficLevel = 1;
         trafficBlocks = 3;
       }
+      setTrafficLevel(trafficLevel);
+      setTrafficBlocks(trafficBlocks);
+      setWeatherSeverity(weatherSeverity);
+      // Use API in future
+      setIsHoliday(false);
+      setIsEventNearby(false);
       
       // Create request payload with actual route details
       const requestPayload = {
@@ -306,7 +318,14 @@ function RiderPage() {
         rideId: bookingResponse.data.ride_id,
         pickup: pickup,
         dropoff: dropoff,
-        fare: fare
+        fare: fare,
+        ride_demand_level: 4,
+        traffic_level: trafficLevel || 1,
+        weather_severity: weatherSeverity,
+        traffic_blocks: trafficBlocks || 3,
+        is_holiday: false,
+        is_event_nearby: false,
+        user_loyalty_tier: 2
       });
     } catch (error) {
       console.error('Error booking ride:', error);

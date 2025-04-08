@@ -68,12 +68,12 @@ def rank_requests():
         driver_data = data.get('driver_profile')
         driver = DriverProfile(**driver_data)
         
-        # Extract user profiles
-        user_profiles_data = data.get('user_profiles', {})
-        user_profiles = {
-            user_id: UserProfile(**profile_data)
-            for user_id, profile_data in user_profiles_data.items()
-        }
+        # # Extract user profiles
+        # user_profiles_data = data.get('user_profiles', {})
+        # user_profiles = {
+        #     user_id: UserProfile(**profile_data)
+        #     for user_id, profile_data in user_profiles_data.items()
+        # }
         
         # Extract trip requests
         requests_data = data.get('trip_requests', [])
@@ -86,11 +86,11 @@ def rank_requests():
         current_supply = data.get('current_supply', 20)
         
         # Rank requests
-        ranked_requests = evaluator.rank_requests(trip_requests, driver, user_profiles, current_supply)
+        # ranked_requests = evaluator.rank_requests(trip_requests, driver, current_supply)
+        score = evaluator.rank_requests(trip_requests, driver, current_supply)
         
         # Convert ranked requests to JSON-friendly format
-        ranked_requests_json = [
-            {
+        ranked_requests_json = {
                 "request_id": score.request_id,
                 "fare": score.fare,
                 "profit": score.profit,
@@ -104,13 +104,13 @@ def rank_requests():
                 "final_score": score.final_score,
                 "request": asdict(score.request)  # Convert TripRequest to dict
             }
-            for score in ranked_requests
-        ]
+        
+        
         
         # Return ranked requests as JSON
         return jsonify({
             "status": "success",
-            "ranked_requests": ranked_requests_json
+            "optimised_requestid": ranked_requests_json.request_id
         })
     
     except Exception as e:

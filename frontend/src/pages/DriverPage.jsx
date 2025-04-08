@@ -210,7 +210,7 @@ function DriverPage() {
               <Typography variant="body2">From: {ride.pickup}</Typography>
               <Typography variant="body2">To: {ride.dropoff}</Typography>
               <Typography variant="body2" color="primary">
-                Fare: ${ride.fare.toFixed(2)}
+                Fare: Rs.{ride.fare.toFixed(2)}
               </Typography>
               <Button
                 variant="contained"
@@ -237,7 +237,7 @@ function DriverPage() {
           <Typography variant="body2">From: {currentRide.pickup}</Typography>
           <Typography variant="body2">To: {currentRide.dropoff}</Typography>
           <Typography variant="body2" color="primary">
-            Fare: ${currentRide.fare.toFixed(2)}
+            Fare: Rs.{currentRide.fare.toFixed(2)}
           </Typography>
           <Button
             variant="contained"

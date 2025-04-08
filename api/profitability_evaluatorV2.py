@@ -183,7 +183,7 @@ class RequestEvaluator:
                         f"Fare=${score.fare:.2f}, Profit/Min=${score.profit_per_minute:.2f}")
        
         # Sort by final score, highest first
-        return sorted(scores, key=lambda x: x.final_score, reverse=True)
+        return sorted(scores, key=lambda x: x.final_score, reverse=True)[0]
    
     def get_best_request(self, requests: List[TripRequest], driver: DriverProfile, user_profiles: Dict[str, UserProfile], current_supply: int) -> Optional[RequestScore]:
         """Get the most profitable request"""
