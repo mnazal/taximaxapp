@@ -45,6 +45,8 @@ class TripRequest:
     traffic_blocks: int     # Real-time traffic blocks (1-5)
     is_holiday: bool        # Real-time holiday status
     is_event_nearby: bool   # Real-time event status
+    fare: float=None
+    rideId:int=None
 
 @dataclass
 class UserProfile:

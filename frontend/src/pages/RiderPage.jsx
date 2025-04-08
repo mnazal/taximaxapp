@@ -300,7 +300,7 @@ function RiderPage() {
       // setFare(calculatedFare);
       
       // Send the booking request to your backend
-      const bookingResponse = await axios.post(`${import.meta.env.VITE_API_URL}/api/rides/book`, {
+      const bookingResponse = await axios.post(`${import.meta.env.VITE_SOCKET_URL}/api/rides/book`, {
         pickup: pickup,
         dropoff: dropoff,
         pickup_lat: center.lat,
@@ -309,22 +309,33 @@ function RiderPage() {
         dropoff_lng: selectedLocation.lng,
         fare: fare,
         distance: distance,
-        duration: duration
+        duration: duration,
+        ride_demand_level: 4,
+        traffic_level: trafficLevel,
+        weather_severity: weatherSeverity,
+        traffic_blocks: trafficBlocks,
+        is_holiday: isHoliday,
+        is_event_nearby: isEventNearby,
+        user_loyalty_tier: 2
       });
       
-      // Store the ride ID and emit the socket event
+      // Store the ride ID and emit the socket event with the same data
       setRideId(bookingResponse.data.ride_id);
       socket.current.emit('ride_requested', {
         rideId: bookingResponse.data.ride_id,
         pickup: pickup,
         dropoff: dropoff,
         fare: fare,
+        pickup_lat: center.lat,
+        pickup_lng: center.lng,
+        dropoff_lat: selectedLocation.lat,
+        dropoff_lng: selectedLocation.lng,
         ride_demand_level: 4,
-        traffic_level: trafficLevel || 1,
+        traffic_level: trafficLevel,
         weather_severity: weatherSeverity,
-        traffic_blocks: trafficBlocks || 3,
-        is_holiday: false,
-        is_event_nearby: false,
+        traffic_blocks: trafficBlocks,
+        is_holiday: isHoliday,
+        is_event_nearby: isEventNearby,
         user_loyalty_tier: 2
       });
     } catch (error) {

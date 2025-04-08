@@ -9,6 +9,7 @@ from pricing_engine import PricingEngine, TripRequest, UserProfile, PricingConfi
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class DriverProfile:
     """Profile containing driver preferences and status"""
@@ -26,7 +27,7 @@ class DriverProfile:
 @dataclass
 class RequestScore:
     """Detailed scoring of a trip request"""
-    request_id: str
+    request_id: int
     fare: float
     profit: float  # Fare - costs
     deadhead_distance: float  # Distance to pickup
@@ -42,8 +43,7 @@ class RequestScore:
 class RequestEvaluator:
     """Evaluates multiple requests to find the most profitable one"""
    
-    def __init__(self, pricing_engine):  # Fixed: Added pricing_engine parameter
-        self.pricing_engine = pricing_engine
+    def __init__(self):  # Fixed: Changed _init_ to __init__
         # Default weights for different factors
         self.score_weights = {
             "profit": 0.35,
@@ -84,7 +84,7 @@ class RequestEvaluator:
         """Evaluate a single request and return its profitability score"""
         fare = request.fare
         if fare is None:
-            logger.warning(f"No fare provided for request {request.user_id}_{request.timestamp}. Skipping.")
+            #logger.warning(f"No fare provided for request {request.user_id}_{request.timestamp}. Skipping.")
             return None  # Or handle as needed
 
        
@@ -124,7 +124,9 @@ class RequestEvaluator:
        
         # Opportunity cost - potential lost fare if this trip takes too long
         # Higher during peak hours
-        hour = int((request.timestamp % 86400) / 3600)
+        from datetime import datetime
+
+        hour = datetime.now().hour
         peak_hours = [7, 8, 9, 17, 18, 19]
         opportunity_cost = 0
        
@@ -149,7 +151,7 @@ class RequestEvaluator:
         )
        
         # Create request ID
-        request_id = f"{request.user_id}_{request.timestamp}"
+        request_id = request.rideId
        
         return RequestScore(
             request_id=request_id,
@@ -166,8 +168,8 @@ class RequestEvaluator:
             request=request
         )
    
-    def rank_requests(self, requests: List[TripRequest], driver: DriverProfile, user_profiles: Dict[str, UserProfile], current_supply: int) -> List[RequestScore]:
-        """Rank multiple requests by profitability score"""
+    def rank_requests(self, requests: List[TripRequest], driver: DriverProfile, user_profiles: Dict[str, UserProfile], current_supply: int) -> RequestScore:
+        """Find the highest scoring request"""
         scores = []
        
         for request in requests:
@@ -176,18 +178,38 @@ class RequestEvaluator:
            
             # Score the request
             score = self.evaluate_request(request, driver, user, current_supply)
-            scores.append(score)
+            if score:  # Only append if score is not None
+                scores.append(score)
            
-            # Log the score details
-            logger.info(f"Request {score.request_id}: Score={score.final_score:.2f}, Profit=${score.profit:.2f}, "
-                        f"Fare=${score.fare:.2f}, Profit/Min=${score.profit_per_minute:.2f}")
+                # Log the score details
+                logger.info(f"Request {score.request_id}: Score={score.final_score:.2f}, Profit=${score.profit:.2f}, "
+                            f"Fare=${score.fare:.2f}, Profit/Min=${score.profit_per_minute:.2f}")
        
-        # Sort by final score, highest first
+        # Sort by final score, highest first and return the top one
+        if not scores:
+            return None
+            
         return sorted(scores, key=lambda x: x.final_score, reverse=True)[0]
+   
+    def get_best_requests(self, requests: List[TripRequest], driver: DriverProfile, user_profiles: Dict[str, UserProfile], current_supply: int) -> List[RequestScore]:
+        """Get all requests ranked by profitability"""
+        scores = []
+       
+        for request in requests:
+            # Get user profile or use default
+            user = user_profiles.get(request.user_id, UserProfile())
+           
+            # Score the request
+            score = self.evaluate_request(request, driver, user, current_supply)
+            if score:  # Only append if score is not None
+                scores.append(score)
+           
+        # Sort by final score, highest first
+        return sorted(scores, key=lambda x: x.final_score, reverse=True)
    
     def get_best_request(self, requests: List[TripRequest], driver: DriverProfile, user_profiles: Dict[str, UserProfile], current_supply: int) -> Optional[RequestScore]:
         """Get the most profitable request"""
-        ranked_requests = self.rank_requests(requests, driver, user_profiles, current_supply)
+        ranked_requests = self.get_best_requests(requests, driver, user_profiles, current_supply)
        
         if not ranked_requests:
             return None
@@ -199,7 +221,7 @@ class RequestEvaluator:
             logger.info(f"Best request fare (${best_request.fare:.2f}) below driver minimum (${driver.min_acceptable_fare:.2f})")
             return None
            
-        return ranked_requests
+        return best_request
 
 
 # Example usage
@@ -209,7 +231,7 @@ def demo_request_evaluator():
     pricing_engine = PricingEngine(config)
    
     # Initialize evaluator
-    evaluator = RequestEvaluator(pricing_engine)  # Now this should work
+    evaluator = RequestEvaluator()  # Fixed: Removed pricing_engine parameter
    
     # Create driver profile
     driver = DriverProfile(
@@ -240,7 +262,8 @@ def demo_request_evaluator():
             weather_severity=0,
             traffic_blocks=2,
             is_holiday=False,
-            is_event_nearby=False
+            is_event_nearby=False,
+            fare=15.50  # Added fare field
         ),
         TripRequest(
             user_id="user2",
@@ -253,7 +276,8 @@ def demo_request_evaluator():
             weather_severity=0,
             traffic_blocks=1,
             is_holiday=False,
-            is_event_nearby=False
+            is_event_nearby=False,
+            fare=22.75  # Added fare field
         ),
         TripRequest(
             user_id="user3",
@@ -266,7 +290,8 @@ def demo_request_evaluator():
             weather_severity=1,
             traffic_blocks=3,
             is_holiday=False,
-            is_event_nearby=True
+            is_event_nearby=True,
+            fare=35.25  # Added fare field
         )
     ]
    
@@ -278,8 +303,7 @@ def demo_request_evaluator():
     }
    
     # Find the best request
-    best_requests = evaluator.get_best_request(requests, driver, user_profiles, current_supply=20)
-    best_request=best_requests[0]
+    best_request = evaluator.get_best_request(requests, driver, user_profiles, current_supply=20)
    
     if best_request:
         print(f"\nBest Request: {best_request.request_id}")
@@ -294,7 +318,7 @@ def demo_request_evaluator():
     else:
         print("No suitable requests found.")
 
-    return best_requests
+    return best_request
 
 
 if __name__ == "__main__":

@@ -15,7 +15,7 @@ CORS(app)  # Enable CORS for all routes
 # Initialize pricing engine and evaluator
 config = PricingConfig()
 pricing_engine = PricingEngine(config)
-evaluator = RequestEvaluator(pricing_engine)
+evaluator = RequestEvaluator()
 
 
 @app.route("/calculate_price", methods=["POST"])
@@ -34,7 +34,8 @@ def calculate_price():
             weather_severity=data['trip_request'].get('weather_severity', 2),
             traffic_blocks=data['trip_request'].get('traffic_blocks', 3),
             is_holiday=data['trip_request'].get('is_holiday', False),
-            is_event_nearby=data['trip_request'].get('is_event_nearby', False)
+            is_event_nearby=data['trip_request'].get('is_event_nearby', False),
+            fare=0  # Initialize with 0, will be calculated
         )
 
         user_profile = UserProfile(
@@ -68,15 +69,15 @@ def rank_requests():
         driver_data = data.get('driver_profile')
         driver = DriverProfile(**driver_data)
         
-        # # Extract user profiles
-        # user_profiles_data = data.get('user_profiles', {})
-        # user_profiles = {
-        #     user_id: UserProfile(**profile_data)
-        #     for user_id, profile_data in user_profiles_data.items()
-        # }
+        # Extract user profiles
+        user_profiles_data = data.get('user_profiles', {})
+        user_profiles = {
+            user_id: UserProfile(**profile_data)
+            for user_id, profile_data in user_profiles_data.items()
+        }
         
         # Extract trip requests
-        requests_data = data.get('trip_requests', [])
+        requests_data = data.get('rideRequests', [])
         trip_requests = [
             TripRequest(**request_data)
             for request_data in requests_data
@@ -85,33 +86,37 @@ def rank_requests():
         # Extract current supply (optional, default to 20)
         current_supply = data.get('current_supply', 20)
         
-        # Rank requests
-        # ranked_requests = evaluator.rank_requests(trip_requests, driver, current_supply)
-        score = evaluator.rank_requests(trip_requests, driver, current_supply)
+        # Rank requests and get the best one
+        best_request = evaluator.rank_requests(trip_requests, driver, user_profiles, current_supply)
         
-        # Convert ranked requests to JSON-friendly format
-        ranked_requests_json = {
-                "request_id": score.request_id,
-                "fare": score.fare,
-                "profit": score.profit,
-                "deadhead_distance": score.deadhead_distance,
-                "pickup_time": score.pickup_time,
-                "total_time": score.total_time,
-                "profit_per_minute": score.profit_per_minute,
-                "profit_per_mile": score.profit_per_mile,
-                "surge_factor": score.surge_factor,
-                "opportunity_cost": score.opportunity_cost,
-                "final_score": score.final_score,
-                "request": asdict(score.request)  # Convert TripRequest to dict
+        if best_request:
+            # Convert best request to JSON-friendly format
+            ranked_requests_json = {
+
+                "request_id": best_request.request_id,
+                "fare": best_request.fare,
+                "profit": best_request.profit,
+                "deadhead_distance": best_request.deadhead_distance,
+                "pickup_time": best_request.pickup_time,
+                "total_time": best_request.total_time,
+                "profit_per_minute": best_request.profit_per_minute,
+                "profit_per_mile": best_request.profit_per_mile,
+                "surge_factor": best_request.surge_factor,
+                "opportunity_cost": best_request.opportunity_cost,
+                "final_score": best_request.final_score,
+                "request": asdict(best_request.request)  # Convert TripRequest to dict
             }
-        
-        
-        
-        # Return ranked requests as JSON
-        return jsonify({
-            "status": "success",
-            "optimised_requestid": ranked_requests_json.request_id
-        })
+            
+            # Return ranked requests as JSON
+            return jsonify({
+                "status": "success",
+                "optimised_rideid": ranked_requests_json["request_id"]  # Fixed: Use dictionary access
+            })
+        else:
+            return jsonify({
+                "status": "no_suitable_requests",
+                "message": "No suitable requests found."
+            })
     
     except Exception as e:
         logger.error(f"Error processing request: {e}")

@@ -33,14 +33,34 @@ function DriverPage() {
 
   // Function to get recommended ride
   const getRecommendedRide = useCallback(async (requests) => {
+    const payload = {
+      driver_profile: {
+        current_location: "downtown",
+        current_fuel: 80.0,
+        shift_remaining_time: 120.0,
+        earnings_today: 180.0,
+        earnings_target: 250.0,
+        vehicle_mpg: 25.0,
+        cost_per_mile: 0.32,
+        return_to_base: true,
+        base_location: "downtown",
+        min_acceptable_fare: 8.0
+      },
+      rideRequests: requests,
+      current_supply: 20
+    };
+    console.log(requests)
+  
+    console.log("Payload being sent to API:", JSON.stringify(payload, null, 2));
+  
     try {
-      const response = await axios.post('http://localhost:5000/api/rides/recommend', {
-        rideRequests: requests,
-        driverLocation: center
-      });
-      setRecommendedRideId(response.data.recommendedRideId);
+      const response = await axios.post('http://localhost:8003/rank-requests', payload);
+      const recommendedRideId = response.data.optimised_rideid;
+      setRecommendedRideId(recommendedRideId);
+  
+      console.log("Response from API:", response.data);
     } catch (error) {
-      console.error('Error getting recommended ride:', error);
+      console.error('Error getting recommended ride:', error.response?.data || error.message);
     }
   }, [center]);
 
