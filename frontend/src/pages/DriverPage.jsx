@@ -228,7 +228,7 @@
               key={ride.rideId} 
               sx={{ 
                 mb: 2,
-                border: ride.rideId === recommendedRideId ? `2px solid ${theme.palette.primary.main}` : 'none',
+                border: ride.rideId === recommendedRideId ? '2px solid #4caf50' : 'none',
                 boxShadow: ride.rideId === recommendedRideId ? theme.shadows[4] : theme.shadows[1],
                 transition: 'all 0.3s ease'
               }}
@@ -240,7 +240,7 @@
                     <Typography 
                       variant="caption" 
                       sx={{ 
-                        bgcolor: 'primary.main', 
+                        bgcolor: '#4caf50', 
                         color: 'white', 
                         px: 1, 
                         py: 0.5, 
@@ -252,9 +252,9 @@
                     </Typography>
                   )}
                 </Box>
-                <Typography variant="body2">From: {ride.pickup}</Typography>
-                <Typography variant="body2">To: {ride.dropoff}</Typography>
-                <Typography variant="body2" color="primary">
+                <Typography variant="body2">From: <Box component="span" sx={{ fontWeight: 'bold' }}>{ride.pickup}</Box></Typography>
+                <Typography variant="body2">To: <Box component="span" sx={{ fontWeight: 'bold' }}>{ride.dropoff}</Box></Typography>
+                <Typography variant="h6" sx={{ color: '#2e7d32', fontWeight: 'bold' }}>
                   Fare: Rs.{ride.fare.toFixed(2)}
                 </Typography>
                

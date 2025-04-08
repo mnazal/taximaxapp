@@ -61,16 +61,27 @@ function RiderPage() {
             lng: position.coords.longitude
           };
           setCenter(userLocation);
-          setPickup('Current Location');
+          
+          // Reverse geocode to get address
+          const geocoder = new window.google.maps.Geocoder();
+          geocoder.geocode({ location: userLocation }, (results, status) => {
+            if (status === 'OK' && results[0]) {
+              setPickup(results[0].formatted_address);
+            } else {
+              setPickup('Current Location');
+            }
+          });
         },
         (error) => {
           console.error('Error getting location:', error);
           setCenter(defaultCenter);
+          setPickup('Current Location');
         }
       );
     } else {
       console.error('Geolocation is not supported by this browser.');
       setCenter(defaultCenter);
+      setPickup('Current Location');
     }
 
     return () => {
