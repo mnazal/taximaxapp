@@ -34,35 +34,92 @@
 
     // Function to get recommended ride
     const getRecommendedRide = useCallback(async (requests) => {
-      const payload = {
-        driver_profile: {
-          current_location: "downtown",
-          current_fuel: 80.0,
-          shift_remaining_time: 120.0,
-          earnings_today: 180.0,
-          earnings_target: 250.0,
-          vehicle_mpg: 25.0,
-          cost_per_mile: 0.32,
-          return_to_base: true,
-          base_location: "downtown",
-          min_acceptable_fare: 8.0
-        },
-        rideRequests: requests, // Use the properly formatted API rides
-        current_supply: 20
-      };
-    
-      console.log("Payload being sent to API:", JSON.stringify(payload, null, 2));
-    
-      try {
-        const response = await axios.post('http://localhost:8003/rank-requests', payload);
-        const recommendedRideId = response.data.optimised_rideid;
-        setRecommendedRideId(recommendedRideId);
-    
-        console.log("Response from API:", response.data);
-      } catch (error) {
-        console.error('Error getting recommended ride:', error.response?.data || error.message);
-      }
-    }, [center, recommendedRideRequests]); // Add recommendedRideRequests to dependencies
+      if (!requests || requests.length === 0) return;
+
+      // Calculate optimization score for each ride
+      const optimizedRides = requests.map(ride => {
+        // Calculate deadhead distance (distance from driver to pickup)
+        const deadheadDistance = calculateDistance(
+          center.lat,
+          center.lng,
+          ride.pickup_lat,
+          ride.pickup_lng
+        );
+
+        // Calculate return trip distance (if needed)
+        const returnTripDistance = calculateDistance(
+          ride.dropoff_lat,
+          ride.dropoff_lng,
+          center.lat,
+          center.lng
+        );
+
+        // Calculate total miles (paid + deadhead + return)
+        const totalMiles = ride.distance + deadheadDistance + returnTripDistance;
+
+        // Calculate total cost
+        const costPerMile = 0.32;
+        const totalCost = totalMiles * costPerMile;
+
+        // Calculate profit
+        const profit = ride.fare - totalCost;
+
+        // Calculate profit per mile
+        const profitPerMile = profit / totalMiles;
+
+        // Calculate profit per minute
+        const profitPerMinute = profit / ride.duration;
+
+        // Calculate optimization score
+        // Weights can be adjusted based on priority
+        const score = (
+          (profit * 0.4) +           // Profit weight
+          (profitPerMile * 0.3) +    // Efficiency weight
+          (profitPerMinute * 0.3)    // Time efficiency weight
+        );
+
+        return {
+          ...ride,
+          score,
+          deadheadDistance,
+          returnTripDistance,
+          totalMiles,
+          totalCost,
+          profit,
+          profitPerMile,
+          profitPerMinute
+        };
+      });
+
+      // Sort rides by optimization score
+      optimizedRides.sort((a, b) => b.score - a.score);
+
+      // Get the best ride
+      const bestRide = optimizedRides[0];
+      setRecommendedRideId(bestRide.rideId);
+
+      // Log optimization details for debugging
+      console.log('Optimized Rides:', optimizedRides);
+      console.log('Best Ride:', bestRide);
+    }, [center]);
+
+    // Helper function to calculate distance between two points
+    const calculateDistance = (lat1, lon1, lat2, lon2) => {
+      const R = 6371; // Radius of the earth in km
+      const dLat = deg2rad(lat2 - lat1);
+      const dLon = deg2rad(lon2 - lon1);
+      const a = 
+        Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(deg2rad(lat1)) * Math.cos(deg2rad(lat2)) * 
+        Math.sin(dLon/2) * Math.sin(dLon/2); 
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+      const distance = R * c; // Distance in km
+      return distance * 0.621371; // Convert to miles
+    };
+
+    const deg2rad = (deg) => {
+      return deg * (Math.PI/180);
+    };
 
     useEffect(() => {
       // Initialize socket connection
