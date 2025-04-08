@@ -3,6 +3,19 @@ import { GoogleMap, LoadScript, Autocomplete, DirectionsRenderer } from '@react-
 import { Box, Button, TextField, Paper, Typography, CircularProgress, Alert, Card, CardContent, Grid } from '@mui/material';
 import axios from 'axios';
 import { io } from 'socket.io-client';
+import Header from '../components/Header';
+import styled from 'styled-components';
+
+const PageContainer = styled.div`
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+`;
+
+const MainContent = styled.div`
+  flex: 1;
+  padding: 20px;
+`;
 
 const containerStyle = {
   width: '100%',
@@ -458,100 +471,105 @@ function RiderPage() {
   };
 
   return (
-    <Box sx={{ p: 3, maxWidth: 1000, margin: '0 auto' }}>
-      <Typography variant="h4" gutterBottom sx={{ mb: 4, fontWeight: 'bold' }}>
-        Book a Ride
-      </Typography>
-      
-      <Grid container spacing={3}>
-        <Grid item xs={12} md={8}>
-          <Paper elevation={3} sx={{ p: 2, mb: 3, borderRadius: 2 }}>
-            <LoadScript
-              googleMapsApiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY}
-              libraries={libraries}
-            >
-              <GoogleMap
-                mapContainerStyle={containerStyle}
-                center={center}
-                zoom={15}
-                onClick={handleMapClick}
-                onLoad={(map) => (mapRef.current = map)}
-                options={{
-                  styles: [
-                    {
-                      featureType: "poi",
-                      elementType: "labels",
-                      stylers: [{ visibility: "off" }]
-                    }
-                  ]
-                }}
-              >
-                {directions && <DirectionsRenderer directions={directions} />}
-              </GoogleMap>
-            </LoadScript>
-          </Paper>
-        </Grid>
-
-        <Grid item xs={12} md={4}>
-          <Paper elevation={3} sx={{ p: 3, borderRadius: 2 }}>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4, }}>
-              <LoadScript
-                googleMapsApiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY}
-                libraries={libraries}
-              >
-                <Autocomplete
-                  onLoad={(autocomplete) => onLoad(autocomplete, 'pickup')}
-                  onPlaceChanged={() => onPlaceChanged('pickup')}
+    <PageContainer>
+      <Header />
+      <MainContent>
+        <Box sx={{ p: 3, maxWidth: 1000, margin: '0 auto' }}>
+          <Typography variant="h4" gutterBottom sx={{ mb: 4, fontWeight: 'bold' }}>
+            Book a Ride
+          </Typography>
+          
+          <Grid container spacing={3}>
+            <Grid item xs={12} md={8}>
+              <Paper elevation={3} sx={{ p: 2, mb: 3, borderRadius: 2 }}>
+                <LoadScript
+                  googleMapsApiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY}
+                  libraries={libraries}
                 >
-                  <TextField
-                    fullWidth
-                    label="Pickup Location"
-                    value={pickup}
-                    onChange={(e) => setPickup(e.target.value)}
-                    variant="outlined"
-                  />
-                </Autocomplete>
-                
-                <Autocomplete
-                  onLoad={(autocomplete) => onLoad(autocomplete, 'dropoff')}
-                  onPlaceChanged={() => onPlaceChanged('dropoff')}
-                >
-                  <TextField
-                    fullWidth
-                    label="Dropoff Location"
-                    value={dropoff}
-                    onChange={(e) => setDropoff(e.target.value)}
-                    variant="outlined"
-                  />
-                </Autocomplete>
-              </LoadScript>
+                  <GoogleMap
+                    mapContainerStyle={containerStyle}
+                    center={center}
+                    zoom={15}
+                    onClick={handleMapClick}
+                    onLoad={(map) => (mapRef.current = map)}
+                    options={{
+                      styles: [
+                        {
+                          featureType: "poi",
+                          elementType: "labels",
+                          stylers: [{ visibility: "off" }]
+                        }
+                      ]
+                    }}
+                  >
+                    {directions && <DirectionsRenderer directions={directions} />}
+                  </GoogleMap>
+                </LoadScript>
+              </Paper>
+            </Grid>
 
-              <Typography variant="body2" color="textSecondary" sx={{ textAlign: 'center' }}>
-                Click on the map to select your destination
-              </Typography>
+            <Grid item xs={12} md={4}>
+              <Paper elevation={3} sx={{ p: 3, borderRadius: 2 }}>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 4, }}>
+                  <LoadScript
+                    googleMapsApiKey={import.meta.env.VITE_GOOGLE_MAPS_API_KEY}
+                    libraries={libraries}
+                  >
+                    <Autocomplete
+                      onLoad={(autocomplete) => onLoad(autocomplete, 'pickup')}
+                      onPlaceChanged={() => onPlaceChanged('pickup')}
+                    >
+                      <TextField
+                        fullWidth
+                        label="Pickup Location"
+                        value={pickup}
+                        onChange={(e) => setPickup(e.target.value)}
+                        variant="outlined"
+                      />
+                    </Autocomplete>
+                    
+                    <Autocomplete
+                      onLoad={(autocomplete) => onLoad(autocomplete, 'dropoff')}
+                      onPlaceChanged={() => onPlaceChanged('dropoff')}
+                    >
+                      <TextField
+                        fullWidth
+                        label="Dropoff Location"
+                        value={dropoff}
+                        onChange={(e) => setDropoff(e.target.value)}
+                        variant="outlined"
+                      />
+                    </Autocomplete>
+                  </LoadScript>
 
-              {renderRideDetails()}
+                  <Typography variant="body2" color="textSecondary" sx={{ textAlign: 'center' }}>
+                    Click on the map to select your destination
+                  </Typography>
 
-              <Button
-                variant="contained"
-                onClick={handleBookRide}
-                disabled={!pickup || !dropoff || rideStatus === 'requesting'}
-                size="large"
-                sx={{ 
-                  py: 1.5,
-                  bgcolor: 'primary.main',
-                  '&:hover': { bgcolor: 'primary.dark' }
-                }}
-              >
-                {rideStatus === 'requesting' ? 'Requesting Ride...' : 'Book Ride'}
-              </Button>
+                  {renderRideDetails()}
 
-              {renderRideStatus()}
-            </Box>
-          </Paper>
-        </Grid>
-      </Grid>
-    </Box>
+                  <Button
+                    variant="contained"
+                    onClick={handleBookRide}
+                    disabled={!pickup || !dropoff || rideStatus === 'requesting'}
+                    size="large"
+                    sx={{ 
+                      py: 1.5,
+                      bgcolor: 'primary.main',
+                      '&:hover': { bgcolor: 'primary.dark' }
+                    }}
+                  >
+                    {rideStatus === 'requesting' ? 'Requesting Ride...' : 'Book Ride'}
+                  </Button>
+
+                  {renderRideStatus()}
+                </Box>
+              </Paper>
+            </Grid>
+          </Grid>
+        </Box>
+      </MainContent>
+    </PageContainer>
   );
 }
 
